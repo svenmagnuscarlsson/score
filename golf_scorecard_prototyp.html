@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Golf Scorecard Prototyp</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS för kartor -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            -webkit-tap-highlight-color: transparent;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Fixa Leaflet-behållare i mörkt tema */
+        .leaflet-container {
+            background: #020617 !important;
+        }
+        .leaflet-bar {
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            box-shadow: none !important;
+        }
+        .leaflet-bar a {
+            background-color: #0f172a !important;
+            color: #f1f5f9 !important;
+            border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+        }
+        .leaflet-bar a:hover {
+            background-color: #1e293b !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex justify-center">
+
+    <!-- Container som simulerar mobilskärm -->
+    <div class="w-full max-w-md bg-slate-950 min-h-screen flex flex-col shadow-2xl relative overflow-hidden">
+        
+        <!-- App Header -->
+        <header class="bg-emerald-800 px-6 py-4 flex items-center justify-between border-b border-emerald-700/50 shrink-0 z-[1000]">
+            <div class="flex items-center gap-2">
+                <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H4a2 2 0 00-2 2v16m15 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                </svg>
+                <h1 class="text-xl font-bold tracking-tight text-white">GolfTracker</h1>
+            </div>
+            <span class="text-xs bg-emerald-900/80 text-emerald-300 px-2.5 py-1 rounded-full border border-emerald-600/30 font-medium">PROTOTYP</span>
+        </header>
+
+        <!-- Huvudinnehåll (Dynamiska vyer) -->
+        <main class="flex-1 overflow-y-auto no-scrollbar pb-24 p-4">
+            
+            <!-- VY 1: HOME / DASHBOARD -->
+            <section id="view-home" class="space-y-6">
+                <!-- Tabbar för Växling mellan Mallar och Historik -->
+                <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800/80">
+                    <button id="btn-tab-templates" onclick="switchHomeTab('templates')" class="flex-1 text-center py-2.5 text-xs font-bold rounded-lg bg-emerald-500 text-slate-950 transition-all">
+                        Rundmallar
+                    </button>
+                    <button id="btn-tab-history" onclick="switchHomeTab('history')" class="flex-1 text-center py-2.5 text-xs font-bold rounded-lg text-slate-400 transition-all">
+                        Historik
+                    </button>
+                </div>
+
+                <!-- Banderoll för att återuppta plötsligt avslutad runda -->
+                <div id="resume-banner-container" class="hidden"></div>
+
+                <!-- SEKTION: MALLAR -->
+                <div id="section-templates" class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Dina rundmallar</h2>
+                        <button onclick="switchView('create')" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2 px-4 rounded-xl text-xs transition-colors flex items-center gap-1">
+                            <span>+ Ny runda</span>
+                        </button>
+                    </div>
+                    <div id="rounds-list" class="space-y-3">
+                        <!-- Fylls på av JS -->
+                    </div>
+                </div>
+
+                <!-- SEKTION: HISTORIK -->
+                <div id="section-history" class="hidden space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Spelade rundor</h2>
+                        <button onclick="clearHistory()" class="text-rose-400 hover:text-rose-300 text-xs font-semibold">Rensa all historik</button>
+                    </div>
+                    <div id="history-list" class="space-y-3">
+                        <!-- Fylls på av JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- VY 2: SKAPA / EDITERA RUNDA -->
+            <section id="view-create" class="hidden space-y-6">
+                <div class="flex items-center gap-3">
+                    <button onclick="switchView('home')" class="text-slate-400 hover:text-white p-1">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    </button>
+                    <h2 id="create-view-title" class="text-lg font-bold text-slate-200">Konfigurera ny runda</h2>
+                </div>
+
+                <div class="space-y-4 bg-slate-900 p-4 rounded-2xl border border-slate-800">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Namn på runda</label>
+                        <input id="input-round-name" type="text" placeholder="Ex: Söndagsrundan, Masters Cup..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-emerald-500 transition-all">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Välj Tee färg</label>
+                        <div class="grid grid-cols-3 gap-3">
+                            <button onclick="selectTee('Röd')" id="tee-Röd" class="tee-btn py-3 rounded-xl border border-rose-500/30 bg-rose-950/20 text-rose-300 font-bold text-sm transition-all flex items-center justify-center gap-2">
+                                <span class="w-3.5 h-3.5 rounded-full bg-rose-500"></span> Röd
+                            </button>
+                            <button onclick="selectTee('Gul')" id="tee-Gul" class="tee-btn py-3 rounded-xl border border-amber-500/30 bg-amber-950/20 text-amber-300 font-bold text-sm transition-all flex items-center justify-center gap-2">
+                                <span class="w-3.5 h-3.5 rounded-full bg-amber-400"></span> Gul
+                            </button>
+                            <button onclick="selectTee('Vit')" id="tee-Vit" class="tee-btn py-3 rounded-xl border border-slate-500/30 bg-slate-950 text-slate-200 font-bold text-sm transition-all flex items-center justify-center gap-2">
+                                <span class="w-3.5 h-3.5 rounded-full bg-slate-100"></span> Vit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Registrera hål-sektion -->
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Registrera hål</h3>
+                        <span id="holes-counter" class="text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded-md font-mono">0 hål tillagda</span>
+                    </div>
+
+                    <div id="hole-setup-card" class="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span class="text-base font-bold text-emerald-400" id="current-setup-hole-label">Registrerar Hål 1</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1.5">Par (3-5)</label>
+                                <div class="flex items-center bg-slate-950 rounded-xl border border-slate-800">
+                                    <button onclick="adjustHoleValue('par', -1)" class="px-3 py-2 text-slate-400 hover:text-white">-</button>
+                                    <input id="input-hole-par" type="number" value="4" readonly class="w-full bg-transparent text-center text-slate-200 font-bold focus:outline-none">
+                                    <button onclick="adjustHoleValue('par', 1)" class="px-3 py-2 text-slate-400 hover:text-white">+</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1.5">Index (1-18)</label>
+                                <div class="flex items-center bg-slate-950 rounded-xl border border-slate-800">
+                                    <button onclick="adjustHoleValue('index', -1)" class="px-3 py-2 text-slate-400 hover:text-white">-</button>
+                                    <input id="input-hole-index" type="number" value="10" readonly class="w-full bg-transparent text-center text-slate-200 font-bold focus:outline-none">
+                                    <button onclick="adjustHoleValue('index', 1)" class="px-3 py-2 text-slate-400 hover:text-white">+</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Kart-sektion för att sätta green-position (med helskärmstoggle) -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Markera greenens mitt</label>
+                                <button type="button" onclick="toggleSetupMapFullscreen(true)" class="text-xs text-yellow-300 font-black flex items-center gap-1 hover:text-yellow-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"></path>
+                                    </svg>
+                                    Helskärmskarta
+                                </button>
+                            </div>
+                            
+                            <div id="setup-map-container" class="relative w-full transition-all duration-300">
+                                <div id="setup-map" class="h-44 rounded-xl overflow-hidden border border-slate-800 z-10"></div>
+                                
+                                <button id="btn-close-fullscreen-map" onclick="toggleSetupMapFullscreen(false)" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 bg-yellow-300 hover:bg-yellow-400 text-slate-950 font-black px-8 py-4 rounded-2xl shadow-2xl z-[4000] items-center gap-2 text-xs uppercase tracking-widest transition-all">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    Bekräfta & stäng
+                                </button>
+                            </div>
+
+                            <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                                <span id="setup-coords-lat">Lat: -</span>
+                                <span id="setup-coords-lng">Lng: -</span>
+                            </div>
+                        </div>
+
+                        <button onclick="addHoleToRound()" class="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold py-2.5 rounded-xl text-sm transition-all">
+                            Spara hål och gå till nästa
+                        </button>
+                    </div>
+
+                    <!-- Lista på redan tillagda hål under skapandet -->
+                    <div id="added-holes-list" class="space-y-2 max-h-40 overflow-y-auto no-scrollbar">
+                        <!-- Renderas av JS -->
+                    </div>
+                </div>
+
+                <div class="pt-4">
+                    <button id="btn-save-round-template" onclick="saveRoundTemplate()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-4 rounded-xl shadow-lg transition-all text-base uppercase tracking-wider">
+                        Spara rundmall
+                    </button>
+                </div>
+            </section>
+
+            <!-- VY 3: SPELA RUNDA (Scorecard & Stroke tracker) -->
+            <section id="view-play" class="hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <button onclick="confirmExitPlay()" class="text-slate-400 hover:text-white p-1">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        </button>
+                        <div>
+                            <h2 id="play-round-name" class="text-base font-bold text-slate-200 truncate max-w-[180px]">Rundans namn</h2>
+                            <p id="play-tee-badge" class="text-xs text-slate-400 flex items-center gap-1"></p>
+                        </div>
+                    </div>
+                    <button onclick="confirmFinishRound()" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold py-1.5 px-3 rounded-lg text-xs transition-all">
+                        Avsluta runda
+                    </button>
+                </div>
+
+                <!-- Hål-väljare -->
+                <div class="flex justify-between items-center bg-slate-900 p-3 rounded-2xl border border-slate-800">
+                    <button onclick="changeActivePlayHole(-1)" class="p-2 text-slate-400 hover:text-white transition-colors bg-slate-950 rounded-xl">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                    <div class="text-center">
+                        <div id="play-current-hole-num" class="text-xl font-black text-white">HÅL 1</div>
+                        <div id="play-current-hole-details" class="text-xs text-slate-400">PAR 4 | INDEX 12</div>
+                    </div>
+                    <button onclick="changeActivePlayHole(1)" class="p-2 text-slate-400 hover:text-white transition-colors bg-slate-950 rounded-xl">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Avståndsindikator -->
+                <div class="bg-slate-900 rounded-2xl p-6 border border-slate-800 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avstånd till green</span>
+                        <span id="play-gps-status" class="text-[10px] text-emerald-400 flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> GPS Aktiv
+                        </span>
+                    </div>
+                    <div class="text-center py-4">
+                        <!-- Högkontrast gul färg -->
+                        <div id="play-distance-value" class="text-6xl font-black text-yellow-300 tracking-tight drop-shadow-[0_2px_8px_rgba(250,204,21,0.2)]">-- <span class="text-xl text-yellow-500/80">m</span></div>
+                        <p class="text-xs text-slate-400 mt-2">Från din position till greenens mitt</p>
+                    </div>
+                </div>
+
+                <!-- Registrerade slag på aktivt hål -->
+                <div class="bg-slate-900 rounded-3xl p-6 border border-slate-800 text-center space-y-6 shadow-xl">
+                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-widest block">Registrerade slag</span>
+                    <div id="play-stroke-counter" class="text-7xl font-black text-emerald-400 tracking-tighter">0</div>
+                    
+                    <!-- Action-knapp för att registrera slag -->
+                    <button onclick="registerStroke()" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 active:scale-[0.98] text-slate-950 font-black py-5 rounded-2xl shadow-lg transition-all text-lg flex flex-col items-center justify-center gap-1">
+                        <span>SLAG REGISTRERAT</span>
+                        <span class="text-xs text-emerald-950 font-medium tracking-wide flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path></svg>
+                            Logga GPS-koordinat
+                        </span>
+                    </button>
+                </div>
+
+                <!-- GPS-Logg för hålet -->
+                <div class="space-y-3">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Slaglogg (GPS)</h3>
+                    <div id="stroke-log-list" class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
+                        <!-- Fylls på av JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- VY 4: HISTORIK DETALJER -->
+            <section id="view-history-detail" class="hidden space-y-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <button onclick="switchView('home'); switchHomeTab('history');" class="text-slate-400 hover:text-white p-1">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        </button>
+                        <div>
+                            <h2 id="history-detail-name" class="text-base font-bold text-slate-200">Rundnamn</h2>
+                            <p id="history-detail-date" class="text-xs text-slate-500">Datum</p>
+                        </div>
+                    </div>
+                    <span id="history-detail-tee" class="text-xs px-2.5 py-1 rounded-full font-semibold">Tee</span>
+                </div>
+
+                <!-- Summeringskort -->
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 grid grid-cols-2 gap-4 text-center">
+                    <div>
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500">Totala Slag</span>
+                        <div id="history-sum-strokes" class="text-3xl font-black text-yellow-300">0</div>
+                    </div>
+                    <div>
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500">Totalt Resultat</span>
+                        <div id="history-sum-diff" class="text-3xl font-black text-slate-200">E</div>
+                    </div>
+                </div>
+
+                <!-- Hål för hål resultatlista -->
+                <div class="space-y-3">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Hål för Hål</h3>
+                    <div id="history-holes-container" class="space-y-2">
+                        <!-- Genereras dynamiskt -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Eget utvecklat Modalgränssnitt -->
+        <div id="custom-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-6 z-[3000]">
+            <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl transform transition-all">
+                <h3 id="modal-title" class="text-base font-black text-slate-100">Rubrik</h3>
+                <p id="modal-body" class="text-xs text-slate-400 leading-relaxed">Beskrivning...</p>
+                <div id="modal-actions" class="flex gap-2 pt-2">
+                    <!-- Fylls på av JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Toast Meddelande -->
+        <div id="custom-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-slate-200 px-4 py-3 rounded-2xl shadow-xl border border-slate-700 text-xs font-medium flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 z-[4000] pointer-events-none">
+            <span id="toast-text">Meddelande här...</span>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- DATASTRUKTURER & STATE ---
+        let rounds = [];
+        let history = [];
+        let currentCreateRound = {
+            name: '',
+            tee: 'Gul',
+            holes: []
+        };
+        let activePlay = null;
+        let editingRoundId = null; // Håller reda på om vi editerar en befintlig runda
+
+        // Kartinställningar (Leaflet)
+        let setupMapInstance = null;
+        let setupMarker = null;
+
+        // Koordinat-state
+        let selectedGreenCoords = { lat: 57.6010, lng: 12.0160 };
+        let currentUserCoords = { lat: 57.5990, lng: 12.0130 };
+        let gpsWatcherId = null;
+
+        const MOCK_ROUNDS = [
+            {
+                id: "round-1",
+                name: "Mölndals GK (Mock)",
+                tee: "Gul",
+                holes: [
+                    { number: 1, par: 4, index: 12, greenLat: 57.6015, greenLng: 12.0165 },
+                    { number: 2, par: 3, index: 18, greenLat: 57.6030, greenLng: 12.0180 },
+                    { number: 3, par: 5, index: 4,  greenLat: 57.6045, greenLng: 12.0200 },
+                    { number: 4, par: 4, index: 8,  greenLat: 57.6060, greenLng: 12.0220 }
+                ]
+            }
+        ];
+
+        // --- LIFECYCLE ---
+        window.addEventListener('DOMContentLoaded', () => {
+            const storedRounds = localStorage.getItem('golf_rounds');
+            if (storedRounds) {
+                rounds = JSON.parse(storedRounds);
+            } else {
+                rounds = MOCK_ROUNDS;
+                localStorage.setItem('golf_rounds', JSON.stringify(rounds));
+            }
+
+            const storedHistory = localStorage.getItem('golf_history');
+            if (storedHistory) {
+                history = JSON.parse(storedHistory);
+            }
+
+            renderRoundsList();
+            renderHistoryList();
+            selectTee('Gul');
+
+            // Kontrollera om det finns en sparad oavslutad runda i localStorage
+            checkAndRenderResumeBanner();
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    currentUserCoords.lat = position.coords.latitude;
+                    currentUserCoords.lng = position.coords.longitude;
+                    selectedGreenCoords.lat = position.coords.latitude;
+                    selectedGreenCoords.lng = position.coords.longitude;
+                }, null, { enableHighAccuracy: true });
+            }
+        });
+
+        // --- AVSTÅNDSBERÄKNING (Haversine Formula) ---
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const phi1 = lat1 * Math.PI / 180;
+            const phi2 = lat2 * Math.PI / 180;
+            const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+            const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                      Math.cos(phi1) * Math.cos(phi2) *
+                      Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return R * c;
+        }
+
+        // --- MODALSYSTEM ---
+        function showModal(title, body, confirmBtnText, onConfirm, cancelBtnText = null, onCancel = null) {
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-body').innerText = body;
+
+            const actionsContainer = document.getElementById('modal-actions');
+            actionsContainer.innerHTML = '';
+
+            if (cancelBtnText) {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = "flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition-all";
+                cancelBtn.innerText = cancelBtnText;
+                cancelBtn.onclick = () => {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                    if (onCancel) onCancel();
+                };
+                actionsContainer.appendChild(cancelBtn);
+            }
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.className = "flex-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2.5 rounded-xl text-xs transition-all";
+            confirmBtn.innerText = confirmBtnText;
+            confirmBtn.onclick = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                if (onConfirm) onConfirm();
+            };
+            actionsContainer.appendChild(confirmBtn);
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // --- UTILS ---
+        function showToast(message) {
+            const toast = document.getElementById('custom-toast');
+            const text = document.getElementById('toast-text');
+            text.innerText = message;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+
+        function switchView(viewName, roundIdToEdit = null) {
+            document.getElementById('view-home').classList.add('hidden');
+            document.getElementById('view-create').classList.add('hidden');
+            document.getElementById('view-play').classList.add('hidden');
+            document.getElementById('view-history-detail').classList.add('hidden');
+
+            if (gpsWatcherId !== null && viewName !== 'play') {
+                navigator.geolocation.clearWatch(gpsWatcherId);
+                gpsWatcherId = null;
+            }
+
+            if (viewName === 'home') {
+                document.getElementById('view-home').classList.remove('hidden');
+                renderRoundsList();
+                renderHistoryList();
+                checkAndRenderResumeBanner();
+            } else if (viewName === 'create') {
+                document.getElementById('view-create').classList.remove('hidden');
+                if (roundIdToEdit) {
+                    loadRoundForEditing(roundIdToEdit);
+                } else {
+                    resetCreateForm();
+                }
+                setTimeout(initSetupMap, 100);
+            } else if (viewName === 'play') {
+                document.getElementById('view-play').classList.remove('hidden');
+                renderPlayScreen();
+            } else if (viewName === 'history-detail') {
+                document.getElementById('view-history-detail').classList.remove('hidden');
+            }
+        }
+
+        function switchHomeTab(tabName) {
+            const btnTemplates = document.getElementById('btn-tab-templates');
+            const btnHistory = document.getElementById('btn-tab-history');
+            const secTemplates = document.getElementById('section-templates');
+            const secHistory = document.getElementById('section-history');
+
+            if (tabName === 'templates') {
+                btnTemplates.className = "flex-1 text-center py-2.5 text-xs font-bold rounded-lg bg-emerald-500 text-slate-950 transition-all";
+                btnHistory.className = "flex-1 text-center py-2.5 text-xs font-bold rounded-lg text-slate-400 transition-all";
+                secTemplates.classList.remove('hidden');
+                secHistory.classList.add('hidden');
+            } else {
+                btnTemplates.className = "flex-1 text-center py-2.5 text-xs font-bold rounded-lg text-slate-400 transition-all";
+                btnHistory.className = "flex-1 text-center py-2.5 text-xs font-bold rounded-lg bg-emerald-500 text-slate-950 transition-all";
+                secTemplates.classList.add('hidden');
+                secHistory.classList.remove('hidden');
+            }
+        }
+
+        // --- HELSKÄRMSKARTA & MARKERING ---
+        function toggleSetupMapFullscreen(enable) {
+            const container = document.getElementById('setup-map-container');
+            const mapEl = document.getElementById('setup-map');
+            const closeBtn = document.getElementById('btn-close-fullscreen-map');
+
+            if (enable) {
+                container.className = "fixed inset-0 w-screen h-screen z-[3000] bg-slate-950";
+                mapEl.className = "h-full w-full rounded-none border-0 z-10";
+                closeBtn.classList.remove('hidden');
+                closeBtn.classList.add('flex');
+                showToast("Peka på satellitkartan för att sätta greenens mitt.");
+            } else {
+                container.className = "relative w-full transition-all duration-300";
+                mapEl.className = "h-44 rounded-xl overflow-hidden border border-slate-800 z-10";
+                closeBtn.classList.remove('flex');
+                closeBtn.classList.add('hidden');
+            }
+
+            if (setupMapInstance) {
+                setTimeout(() => {
+                    setupMapInstance.invalidateSize();
+                    if (setupMarker) {
+                        setupMapInstance.panTo(setupMarker.getLatLng());
+                    }
+                }, 100);
+            }
+        }
+
+        function initSetupMap() {
+            const container = document.getElementById('setup-map');
+            if (!container) return;
+
+            if (setupMapInstance) {
+                setupMapInstance.invalidateSize();
+                setupMapInstance.setView([selectedGreenCoords.lat, selectedGreenCoords.lng], 16);
+                setupMarker.setLatLng([selectedGreenCoords.lat, selectedGreenCoords.lng]);
+                updateSetupCoordsText(selectedGreenCoords.lat, selectedGreenCoords.lng);
+                return;
+            }
+
+            setupMapInstance = L.map('setup-map', {
+                zoomControl: true,
+                attributionControl: false
+            }).setView([selectedGreenCoords.lat, selectedGreenCoords.lng], 16);
+
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19
+            }).addTo(setupMapInstance);
+
+            setupMarker = L.marker([selectedGreenCoords.lat, selectedGreenCoords.lng], {
+                draggable: true
+            }).addTo(setupMapInstance);
+
+            updateSetupCoordsText(selectedGreenCoords.lat, selectedGreenCoords.lng);
+
+            setupMarker.on('dragend', function () {
+                const position = setupMarker.getLatLng();
+                selectedGreenCoords.lat = position.lat;
+                selectedGreenCoords.lng = position.lng;
+                updateSetupCoordsText(position.lat, position.lng);
+            });
+
+            setupMapInstance.on('click', function (e) {
+                setupMarker.setLatLng(e.latlng);
+                selectedGreenCoords.lat = e.latlng.lat;
+                selectedGreenCoords.lng = e.latlng.lng;
+                updateSetupCoordsText(e.latlng.lat, e.latlng.lng);
+            });
+        }
+
+        function loadRoundForEditing(id) {
+            const round = rounds.find(r => r.id === id);
+            if (!round) return;
+
+            editingRoundId = round.id;
+            currentCreateRound = JSON.parse(JSON.stringify(round)); // Djupkopia
+
+            document.getElementById('create-view-title').innerText = 'Ändra rundmall';
+            document.getElementById('input-round-name').value = currentCreateRound.name;
+            selectTee(currentCreateRound.tee);
+            updateAddedHolesUI();
+            updateCurrentHoleSetupCard();
+
+            if (currentCreateRound.holes.length > 0) {
+                const lastHole = currentCreateRound.holes[currentCreateRound.holes.length - 1];
+                selectedGreenCoords = { lat: lastHole.greenLat, lng: lastHole.greenLng };
+            } else {
+                selectedGreenCoords = { lat: currentUserCoords.lat, lng: currentUserCoords.lng };
+            }
+
+            document.getElementById('btn-save-round-template').innerText = 'Spara ändringar';
+        }
+
+        function updateSetupCoordsText(lat, lng) {
+            document.getElementById('setup-coords-lat').innerText = `Lat: ${lat.toFixed(6)}`;
+            document.getElementById('setup-coords-lng').innerText = `Lng: ${lng.toFixed(6)}`;
+        }
+
+        function resetCreateForm() {
+            editingRoundId = null;
+            currentCreateRound = { name: '', tee: 'Gul', holes: [] };
+            document.getElementById('create-view-title').innerText = 'Konfigurera ny runda';
+            document.getElementById('input-round-name').value = '';
+            document.getElementById('btn-save-round-template').innerText = 'Spara rundmall';
+            selectTee('Gul');
+            updateAddedHolesUI();
+            updateCurrentHoleSetupCard();
+            selectedGreenCoords = { lat: currentUserCoords.lat, lng: currentUserCoords.lng };
+        }
+
+        function selectTee(color) {
+            currentCreateRound.tee = color;
+            document.querySelectorAll('.tee-btn').forEach(btn => {
+                btn.classList.add('opacity-50', 'border-transparent');
+                btn.classList.remove('border-rose-500', 'border-amber-500', 'border-slate-300', 'bg-rose-950/40', 'bg-amber-950/40', 'bg-slate-800');
+            });
+
+            const activeBtn = document.getElementById(`tee-${color}`);
+            activeBtn.classList.remove('opacity-50', 'border-transparent');
+            if (color === 'Röd') {
+                activeBtn.classList.add('border-rose-500', 'bg-rose-950/40');
+            } else if (color === 'Gul') {
+                activeBtn.classList.add('border-amber-400', 'bg-amber-950/40');
+            } else if (color === 'Vit') {
+                activeBtn.classList.add('border-slate-300', 'bg-slate-800');
+            }
+        }
+
+        function adjustHoleValue(type, step) {
+            const input = document.getElementById(`input-hole-${type}`);
+            let val = parseInt(input.value) + step;
+            if (type === 'par') {
+                if (val < 3) val = 3;
+                if (val > 5) val = 5;
+            } else if (type === 'index') {
+                if (val < 1) val = 1;
+                if (val > 18) val = 18;
+            }
+            input.value = val;
+        }
+
+        function updateCurrentHoleSetupCard() {
+            const nextHoleNum = currentCreateRound.holes.length + 1;
+            document.getElementById('current-setup-hole-label').innerText = `Registrerar Hål ${nextHoleNum}`;
+            document.getElementById('input-hole-par').value = 4;
+            document.getElementById('input-hole-index').value = nextHoleNum <= 18 ? nextHoleNum : 1;
+
+            if (setupMapInstance) {
+                selectedGreenCoords.lat += 0.0002;
+                selectedGreenCoords.lng += 0.0002;
+                setupMapInstance.setView([selectedGreenCoords.lat, selectedGreenCoords.lng], 16);
+                setupMarker.setLatLng([selectedGreenCoords.lat, selectedGreenCoords.lng]);
+                updateSetupCoordsText(selectedGreenCoords.lat, selectedGreenCoords.lng);
+            }
+        }
+
+        function addHoleToRound() {
+            const nextHoleNum = currentCreateRound.holes.length + 1;
+            const par = parseInt(document.getElementById('input-hole-par').value);
+            const index = parseInt(document.getElementById('input-hole-index').value);
+
+            currentCreateRound.holes.push({
+                number: nextHoleNum,
+                par: par,
+                index: index,
+                greenLat: selectedGreenCoords.lat,
+                greenLng: selectedGreenCoords.lng
+            });
+
+            updateAddedHolesUI();
+            updateCurrentHoleSetupCard();
+            showToast(`Hål ${nextHoleNum} sparat`);
+        }
+
+        function updateAddedHolesUI() {
+            document.getElementById('holes-counter').innerText = `${currentCreateRound.holes.length} hål tillagda`;
+            const container = document.getElementById('added-holes-list');
+            container.innerHTML = '';
+
+            currentCreateRound.holes.slice().reverse().forEach(hole => {
+                const actualIndex = currentCreateRound.holes.indexOf(hole);
+                const div = document.createElement('div');
+                div.className = "flex flex-col gap-1.5 bg-slate-900 px-4 py-2.5 rounded-xl border border-slate-800/80 text-xs";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div class="flex gap-4">
+                            <span class="font-bold text-slate-300">Hål ${hole.number}</span>
+                            <span class="text-slate-400">PAR <strong class="text-slate-200">${hole.par}</strong></span>
+                            <span class="text-slate-400">INDEX <strong class="text-slate-200">${hole.index}</strong></span>
+                        </div>
+                        <button onclick="deleteHoleFromSetup(${actualIndex})" class="text-rose-400 hover:text-rose-300 font-bold px-2 py-1 transition-colors">
+                            Ta bort
+                        </button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function deleteHoleFromSetup(index) {
+            currentCreateRound.holes.splice(index, 1);
+            
+            // Re-indexera hålnummer sekventiellt (Hål 1, 2, 3...)
+            currentCreateRound.holes.forEach((hole, idx) => {
+                hole.number = idx + 1;
+            });
+            
+            updateAddedHolesUI();
+            updateCurrentHoleSetupCard();
+            showToast('Hål borttaget');
+        }
+
+        function saveRoundTemplate() {
+            const nameInput = document.getElementById('input-round-name').value.trim();
+            if (!nameInput) {
+                showToast('Du måste ange ett rundnamn!');
+                return;
+            }
+            if (currentCreateRound.holes.length === 0) {
+                showToast('Minst ett hål krävs!');
+                return;
+            }
+
+            currentCreateRound.name = nameInput;
+
+            if (editingRoundId) {
+                const index = rounds.findIndex(r => r.id === editingRoundId);
+                if (index !== -1) {
+                    rounds[index] = currentCreateRound;
+                    showToast('Ändringar sparade!');
+                }
+            } else {
+                currentCreateRound.id = 'round-' + Date.now();
+                rounds.push(currentCreateRound);
+                showToast('Ny rundmall sparad!');
+            }
+
+            localStorage.setItem('golf_rounds', JSON.stringify(rounds));
+            switchView('home');
+        }
+
+        // --- DASHBOARD-LISTOR (MALLAR & HISTORIK) ---
+        function renderRoundsList() {
+            const list = document.getElementById('rounds-list');
+            list.innerHTML = '';
+
+            if (rounds.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-12 text-slate-500 border border-slate-800 rounded-3xl">
+                        Inga mallar skapade.
+                    </div>
+                `;
+                return;
+            }
+
+            rounds.forEach(round => {
+                const teeColorClass = round.tee === 'Röd' ? 'bg-rose-500' : (round.tee === 'Gul' ? 'bg-amber-400' : 'bg-slate-100');
+                const div = document.createElement('div');
+                div.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-4";
+                div.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="space-y-1">
+                            <h3 class="font-bold text-slate-200 text-lg">${round.name}</h3>
+                            <div class="flex items-center gap-2">
+                                <span class="flex items-center gap-1.5 text-xs text-slate-400">
+                                    <span class="w-2.5 h-2.5 rounded-full ${teeColorClass}"></span>
+                                    Tee ${round.tee}
+                                </span>
+                                <span class="text-slate-600 text-xs">•</span>
+                                <span class="text-xs text-slate-400 font-mono">${round.holes.length} hål</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-2 pt-2 border-t border-slate-800/60">
+                        <button onclick="startPlaySession('${round.id}')" class="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold py-2.5 rounded-xl transition-colors">
+                            Spela runda
+                        </button>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="editRound('${round.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2 rounded-xl transition-colors">
+                                Ändra
+                            </button>
+                            <button onclick="duplicateRound('${round.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-2 rounded-xl transition-colors">
+                                Kopiera
+                            </button>
+                            <button onclick="deleteRound('${round.id}')" class="bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border border-rose-950/40 text-xs font-bold py-2 rounded-xl transition-colors">
+                                Radera
+                            </button>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function editRound(id) {
+            switchView('create', id);
+        }
+
+        function duplicateRound(id) {
+            const origin = rounds.find(r => r.id === id);
+            if (!origin) return;
+
+            const copy = JSON.parse(JSON.stringify(origin));
+            copy.id = 'round-' + Date.now();
+            copy.name = `${copy.name} (Kopia)`;
+
+            rounds.push(copy);
+            localStorage.setItem('golf_rounds', JSON.stringify(rounds));
+            renderRoundsList();
+            showToast('Rundmall kopierad!');
+        }
+
+        function deleteRound(id) {
+            rounds = rounds.filter(r => r.id !== id);
+            localStorage.setItem('golf_rounds', JSON.stringify(rounds));
+            renderRoundsList();
+            showToast('Rundmall borttagen');
+        }
+
+        // --- AUTO-SAVE LOGIK ---
+        function saveActivePlayToStorage() {
+            if (activePlay) {
+                localStorage.setItem('golf_active_play', JSON.stringify(activePlay));
+            } else {
+                localStorage.removeItem('golf_active_play');
+            }
+        }
+
+        function checkAndRenderResumeBanner() {
+            const container = document.getElementById('resume-banner-container');
+            const storedActive = localStorage.getItem('golf_active_play');
+            
+            if (storedActive) {
+                try {
+                    const parsed = JSON.parse(storedActive);
+                    if (parsed && parsed.name && parsed.holes && parsed.holes.length > 0) {
+                        const currentHole = parsed.holes[parsed.currentHoleIndex];
+                        container.className = "bg-yellow-500/10 border-2 border-yellow-500/30 rounded-2xl p-4 flex flex-col gap-3 mb-4";
+                        container.innerHTML = `
+                            <div class="flex items-start gap-3">
+                                <div class="p-2 bg-yellow-500/20 rounded-xl text-yellow-300 mt-0.5">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                </div>
+                                <div class="space-y-0.5 flex-1">
+                                    <h4 class="font-bold text-yellow-300 text-sm">Oavslutad runda hittades!</h4>
+                                    <p class="text-xs text-slate-300">Du stängde ner appen mitt under spel på <strong>${parsed.name}</strong> på <strong>Hål ${currentHole ? currentHole.number : 1}</strong>.</p>
+                                </div>
+                            </div>
+                            <div class="flex gap-2 text-xs pt-1">
+                                <button onclick="resumeSavedSession()" class="flex-1 bg-yellow-400 hover:bg-yellow-500 text-slate-950 font-black py-2.5 rounded-xl transition-all uppercase tracking-wide">
+                                    Återuppta runda
+                                </button>
+                                <button onclick="discardSavedSessionPrompt()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2.5 rounded-xl transition-all">
+                                    Radera
+                                </button>
+                            </div>
+                        `;
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Kunde inte läsa sparad session:", e);
+                }
+            }
+            container.className = "hidden";
+            container.innerHTML = "";
+        }
+
+        function resumeSavedSession() {
+            const storedActive = localStorage.getItem('golf_active_play');
+            if (storedActive) {
+                activePlay = JSON.parse(storedActive);
+                startGpsWatcher();
+                switchView('play');
+                showToast("Välkommen tillbaka till rundan!");
+            }
+        }
+
+        function discardSavedSessionPrompt() {
+            showModal(
+                "Radera oavslutad runda?",
+                "Är du säker på att du vill kasta bort din sparade spelsession? Dina loggade slag försvinner permanent.",
+                "Ja, ta bort",
+                () => {
+                    localStorage.removeItem('golf_active_play');
+                    activePlay = null;
+                    checkAndRenderResumeBanner();
+                    showToast("Oavslutad runda raderad");
+                },
+                "Avbryt"
+            );
+        }
+
+        // --- SPEL-MOTOR & DETEKTERING ---
+        function startPlaySession(roundId) {
+            const round = rounds.find(r => r.id === roundId);
+            if (!round) return;
+
+            activePlay = {
+                roundId: round.id,
+                name: round.name,
+                tee: round.tee,
+                holes: round.holes,
+                currentHoleIndex: 0,
+                strokes: {}
+            };
+
+            round.holes.forEach(hole => {
+                activePlay.strokes[hole.number] = [];
+            });
+
+            // Spara den nyskapade sessionen direkt
+            saveActivePlayToStorage();
+
+            startGpsWatcher();
+            switchView('play');
+        }
+
+        function startGpsWatcher() {
+            if (gpsWatcherId !== null) {
+                navigator.geolocation.clearWatch(gpsWatcherId);
+                gpsWatcherId = null;
+            }
+
+            if (navigator.geolocation) {
+                gpsWatcherId = navigator.geolocation.watchPosition(
+                    position => {
+                        currentUserCoords.lat = position.coords.latitude;
+                        currentUserCoords.lng = position.coords.longitude;
+                        updateLiveDistanceAndMap();
+                    },
+                    () => {
+                        simulatePlayerMovement();
+                    },
+                    { enableHighAccuracy: true, maximumAge: 0 }
+                );
+            } else {
+                simulatePlayerMovement();
+            }
+        }
+
+        function simulatePlayerMovement() {
+            const currentHole = activePlay.holes[activePlay.currentHoleIndex];
+            currentUserCoords.lat = currentHole.greenLat - 0.0018;
+            currentUserCoords.lng = currentHole.greenLng - 0.0015;
+            updateLiveDistanceAndMap();
+        }
+
+        function updateLiveDistanceAndMap() {
+            if (!activePlay) return;
+
+            const currentHole = activePlay.holes[activePlay.currentHoleIndex];
+            const greenLat = currentHole.greenLat || currentUserCoords.lat;
+            const greenLng = currentHole.greenLng || currentUserCoords.lng;
+
+            const distance = calculateDistance(
+                currentUserCoords.lat, 
+                currentUserCoords.lng, 
+                greenLat, 
+                greenLng
+            );
+
+            document.getElementById('play-distance-value').innerHTML = `${Math.round(distance)} <span class="text-xl text-yellow-500/80">m</span>`;
+        }
+
+        function renderPlayScreen() {
+            if (!activePlay) return;
+
+            document.getElementById('play-round-name').innerText = activePlay.name;
+            const teeColorClass = activePlay.tee === 'Röd' ? 'bg-rose-500' : (activePlay.tee === 'Gul' ? 'bg-amber-400' : 'bg-slate-100');
+            document.getElementById('play-tee-badge').innerHTML = `
+                <span class="w-2.5 h-2.5 rounded-full ${teeColorClass}"></span>
+                Tee ${activePlay.tee}
+            `;
+
+            updateHolePlayView();
+        }
+
+        function updateHolePlayView() {
+            const currentHole = activePlay.holes[activePlay.currentHoleIndex];
+            
+            document.getElementById('play-current-hole-num').innerText = `HÅL ${currentHole.number}`;
+            document.getElementById('play-current-hole-details').innerText = `PAR ${currentHole.par} | INDEX ${currentHole.index}`;
+
+            const strokesForHole = activePlay.strokes[currentHole.number] || [];
+            document.getElementById('play-stroke-counter').innerText = strokesForHole.length;
+
+            updateLiveDistanceAndMap();
+            renderStrokeLog(strokesForHole);
+        }
+
+        function changeActivePlayHole(direction) {
+            let nextIndex = activePlay.currentHoleIndex + direction;
+            if (nextIndex >= 0 && nextIndex < activePlay.holes.length) {
+                activePlay.currentHoleIndex = nextIndex;
+                
+                // Spara ändringen i det aktuella hålet
+                saveActivePlayToStorage();
+                
+                updateHolePlayView();
+            } else {
+                showToast(direction > 0 ? 'Detta var sista hålet.' : 'Detta var första hålet.');
+            }
+        }
+
+        function registerStroke() {
+            const currentHole = activePlay.holes[activePlay.currentHoleIndex];
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            const newStroke = {
+                id: 'stroke-' + Date.now(),
+                time: timeStr,
+                lat: currentUserCoords.lat.toFixed(6),
+                lng: currentUserCoords.lng.toFixed(6)
+            };
+
+            activePlay.strokes[currentHole.number].push(newStroke);
+            
+            // Spara ner slaget och koordinaterna omedelbart (Skyddar mot krascher)
+            saveActivePlayToStorage();
+
+            updateHolePlayView();
+            
+            if (gpsWatcherId === null) {
+                const diffLat = (currentHole.greenLat - currentUserCoords.lat) * 0.45;
+                const diffLng = (currentHole.greenLng - currentUserCoords.lng) * 0.45;
+                currentUserCoords.lat += diffLat;
+                currentUserCoords.lng += diffLng;
+                updateLiveDistanceAndMap();
+            }
+
+            showToast(`Slag ${activePlay.strokes[currentHole.number].length} registrerat`);
+        }
+
+        function renderStrokeLog(strokes) {
+            const list = document.getElementById('stroke-log-list');
+            list.innerHTML = '';
+
+            if (strokes.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-6 text-slate-600 bg-slate-900/30 rounded-2xl border border-slate-800 border-dashed text-xs">
+                        Inga registrerade slag på detta hål ännu.
+                    </div>
+                `;
+                return;
+            }
+
+            strokes.forEach((stroke, idx) => {
+                const item = document.createElement('div');
+                item.className = "bg-slate-900 p-3 rounded-xl border border-slate-800 flex justify-between items-center text-xs";
+                item.innerHTML = `
+                    <div>
+                        <span class="font-bold text-emerald-400 block">Slag ${idx + 1}</span>
+                        <span class="text-slate-500 text-[10px]">${stroke.time}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-slate-300 font-mono text-[10px] block">Lat: ${stroke.lat}</span>
+                        <span class="text-slate-300 font-mono text-[10px] block">Lng: ${stroke.lng}</span>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // --- EXITS & AVBYTNINGAR ---
+        function confirmExitPlay() {
+            showModal(
+                "Avsluta runda?",
+                "Vill du avbryta? Denna session kommer att raderas och ingenting sparas i historiken.",
+                "Ja, avsluta",
+                () => {
+                    activePlay = null;
+                    saveActivePlayToStorage(); // Rensar bort från localStorage
+                    switchView('home');
+                },
+                "Avbryt"
+            );
+        }
+
+        function confirmFinishRound() {
+            showModal(
+                "Slutför runda",
+                "Är du redo att spara denna färdigspelade runda till din historik?",
+                "Ja, spara runda",
+                () => {
+                    saveActiveRoundToHistory();
+                },
+                "Fortsätt spela"
+            );
+        }
+
+        // --- HISTORIKHANTERING ---
+        function saveActiveRoundToHistory() {
+            const historyItem = {
+                id: 'history-' + Date.now(),
+                name: activePlay.name,
+                tee: activePlay.tee,
+                date: new Date().toLocaleDateString('sv-SE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+                holes: JSON.parse(JSON.stringify(activePlay.holes)),
+                strokes: JSON.parse(JSON.stringify(activePlay.strokes))
+            };
+
+            history.push(historyItem);
+            localStorage.setItem('golf_history', JSON.stringify(history));
+
+            activePlay = null;
+            saveActivePlayToStorage(); // Rensar bort auto-save filen eftersom rundan är avslutad och arkiverad
+
+            showToast('Rundan sparad i historiken!');
+            
+            switchView('home');
+            switchHomeTab('history');
+        }
+
+        function renderHistoryList() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+
+            if (history.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-12 text-slate-500 border border-slate-800 rounded-3xl text-sm">
+                        Inga spelade rundor loggade ännu.
+                    </div>
+                `;
+                return;
+            }
+
+            history.slice().reverse().forEach(item => {
+                let totalStrokes = 0;
+                let totalPar = 0;
+                item.holes.forEach(hole => {
+                    totalPar += hole.par;
+                    totalStrokes += (item.strokes[hole.number] || []).length;
+                });
+
+                const scoreDiff = totalStrokes - totalPar;
+                const scoreDiffText = scoreDiff === 0 ? "E" : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
+                const scoreColor = scoreDiff < 0 ? "text-emerald-400" : (scoreDiff > 0 ? "text-rose-400" : "text-slate-300");
+
+                const div = document.createElement('div');
+                div.className = "bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3";
+                div.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="space-y-0.5">
+                            <h3 class="font-bold text-slate-200 text-base truncate max-w-[200px]">${item.name}</h3>
+                            <p class="text-[10px] text-slate-500">${item.date}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs font-mono font-bold ${scoreColor}">${scoreDiffText}</span>
+                            <span class="text-[10px] text-slate-500 block">${totalStrokes} slag</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-end pt-1 border-t border-slate-800/50">
+                        <button onclick="viewHistoryDetail('${item.id}')" class="text-emerald-400 hover:text-emerald-300 text-xs font-semibold py-1 px-2">
+                            Analysera runda &rarr;
+                        </button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function viewHistoryDetail(id) {
+            const item = history.find(h => h.id === id);
+            if (!item) return;
+
+            document.getElementById('history-detail-name').innerText = item.name;
+            document.getElementById('history-detail-date').innerText = item.date;
+
+            const detailTee = document.getElementById('history-detail-tee');
+            detailTee.innerText = `Tee ${item.tee}`;
+            const teeColorClass = item.tee === 'Röd' ? 'bg-rose-950/40 text-rose-300 border border-rose-500/30' : (item.tee === 'Gul' ? 'bg-amber-950/40 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-200 border border-slate-600/30');
+            detailTee.className = `text-[10px] px-2.5 py-1 rounded-full font-semibold ${teeColorClass}`;
+
+            let totalStrokes = 0;
+            let totalPar = 0;
+            item.holes.forEach(hole => {
+                totalPar += hole.par;
+                totalStrokes += (item.strokes[hole.number] || []).length;
+            });
+
+            const scoreDiff = totalStrokes - totalPar;
+            const scoreDiffText = scoreDiff === 0 ? "E" : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
+
+            document.getElementById('history-sum-strokes').innerText = totalStrokes;
+            document.getElementById('history-sum-diff').innerText = scoreDiffText;
+
+            const container = document.getElementById('history-holes-container');
+            container.innerHTML = '';
+
+            item.holes.forEach(hole => {
+                const strokeArr = item.strokes[hole.number] || [];
+                const diff = strokeArr.length - hole.par;
+                
+                let relativeScoreClass = "text-slate-400 bg-slate-950";
+                let relativeScoreLabel = "Par";
+                
+                if (strokeArr.length === 0) {
+                    relativeScoreLabel = "Ej spelad";
+                } else if (diff === -1) {
+                    relativeScoreClass = "text-emerald-400 bg-emerald-950/20 border border-emerald-500/20";
+                    relativeScoreLabel = "Birdie";
+                } else if (diff === -2) {
+                    relativeScoreClass = "text-yellow-400 bg-yellow-950/20 border border-yellow-500/20";
+                    relativeScoreLabel = "Eagle";
+                } else if (diff > 0) {
+                    relativeScoreClass = "text-rose-400 bg-rose-950/20 border border-rose-500/20";
+                    relativeScoreLabel = diff === 1 ? "Bogey" : "Dubbelbogey+";
+                }
+
+                const div = document.createElement('div');
+                div.className = "bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-3";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <span class="text-xs font-bold text-slate-200">Hål ${hole.number}</span>
+                            <span class="text-[10px] text-slate-500 font-mono ml-2">PAR ${hole.par} | INDEX ${hole.index}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${relativeScoreClass}">${relativeScoreLabel}</span>
+                            <span class="text-xs font-black text-slate-200 font-mono">${strokeArr.length} slag</span>
+                        </div>
+                    </div>
+                    ${strokeArr.length > 0 ? `
+                        <div class="bg-slate-950 rounded-lg p-2 space-y-1">
+                            <span class="text-[9px] text-slate-500 uppercase tracking-wider block">GPS-loggade slagpositioner</span>
+                            <div class="grid grid-cols-1 gap-1 max-h-24 overflow-y-auto no-scrollbar">
+                                ${strokeArr.map((stroke, index) => `
+                                    <div class="flex justify-between text-[9px] text-slate-400 font-mono py-0.5 border-b border-slate-900/40 last:border-0">
+                                        <span>Slag ${index + 1} (${stroke.time})</span>
+                                        <span>Lat: ${parseFloat(stroke.lat).toFixed(4)}, Lng: ${parseFloat(stroke.lng).toFixed(4)}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                `;
+                container.appendChild(div);
+            });
+
+            switchView('history-detail');
+        }
+
+        function clearHistory() {
+            showModal(
+                "Rensa all historik?",
+                "Är du helt säker på att du vill ta bort alla spelsessioner och lagrade rundresultat permanent?",
+                "Ja, rensa allt",
+                () => {
+                    history = [];
+                    localStorage.removeItem('golf_history');
+                    renderHistoryList();
+                    showToast('Historiken har rensats');
+                },
+                "Avbryt"
+            );
+        }
+    </script>
+</body>
+</html>
